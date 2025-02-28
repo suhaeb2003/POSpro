@@ -1,0 +1,377 @@
+<script setup>
+import { useForm, router } from "@inertiajs/vue3";
+import { ref } from "vue";
+import { usePage } from "@inertiajs/vue3";
+import { createToaster } from "@meforma/vue-toaster";
+
+const toaster = createToaster({
+  position: "top-right",
+});
+let page = usePage();
+
+const selectedProduct = ref([]);
+const selectedCustomer = ref(null);
+const vatRate = ref(5);
+const flatDiscount = ref(0);
+const discountPercent = ref(0);
+const total = ref(0);
+const vatAmount = ref(0);
+const discountAmount = ref(0);
+const usePercentageDiscount = ref(false);
+
+const removeQty = (id) => {
+  const product = selectedProduct.value.find((product) => product.id === id);
+
+  if (product.unit > 1) {
+    product.unit--;
+    product.exitsQty++; // Increase available stock
+    calculateTotal();
+  }
+};
+const addQty = (id) => {
+  const product = selectedProduct.value.find((product) => product.id === id);
+  if (product.exitsQty > 0) {
+    product.unit++;
+    product.exitsQty--; // Decrease available stock
+    calculateTotal();
+  } else {
+    toaster.warning(`${product.name} is out of stock!`);
+  }
+};
+const calculateTotal = () => {
+  return selectedProduct.value.reduce(
+    (sum, product) => sum + product.productPrice * product.unit,
+    0
+  );
+};
+
+const removeProductFromSale = (index) => {
+  selectedProduct.value.splice(index, 1);
+  calculateTotal();
+};
+//For <-------------------Apply vat ------------------>
+const applyVat = () => {
+  vatAmount.value = (calculateTotal() * vatRate.value) / 100;
+  calculatePayable();
+};
+const removeVat = () => {
+  vatAmount.value = 0;
+  calculatePayable();
+};
+const calculatePayable = () => {
+  const totalAmount = calculateTotal();
+  payable.value = totalAmount + vatAmount.value - discountAmount.value;
+};
+//<-------------------Vat Apply ------------------>
+const applyDiscount = () => {
+  if (usePercentageDiscount.value) {
+    discountAmount.value = (calculateTotal() * discountPercent.value) / 100;
+  } else {
+    discountAmount.value = flatDiscount.value;
+  }
+  calculatePayable();
+};
+//For <-------------------Product Table------------------>
+const addProductToSale = (id, image, name, price, productUnit) => {
+  if (productUnit > 0) {
+    // Check if product is in stock
+    const product = {
+      id: id,
+      image: image,
+      name: name,
+      price: price,
+      unit: 1,
+      exitsQty: productUnit - 1,
+      productPrice: price,
+    };
+    selectedProduct.value.push(product);
+    calculateTotal();
+  } else {
+    toaster.warning(`${name} is out of stock!`);
+  }
+};
+
+const searchProduct = ref("");
+const ProductHeader = [
+  { text: "Image", value: "image_url" },
+  { text: "Name", value: "name" },
+  { text: "Qty", value: "unit" },
+  { text: "Action", value: "action" },
+];
+const ProductItem = ref(page.props.products);
+
+//<-------------------Customer Table------------------>
+const CustomerHeader = [
+  { text: "Name", value: "name" },
+  { text: "Action", value: "action" },
+];
+const searchCustomer = ref("");
+const CustomerItem = ref(page.props.customers);
+const addCustomerToSale = (customer) => {
+  selectedCustomer.value = customer;
+};
+</script>
+
+<template>
+  <div class="container-fluid">
+    <div class="row">
+      <!-- Billing Selection -->
+      <div class="col-md-4 col-lg-4 p-2">
+        <div class="card shadow-sm">
+          <div class="card-body">
+            <h4>Billed To</h4>
+            <div class="shadow-sm h-100 bg-white rounded-3 p-3 mt-4">
+              <div class="row">
+                <div class="col-8">
+                  <span class="h6 fs-6 text-dark">BILLED TO</span>
+                  <p class="fs-6 mx-0 my-1">
+                    Name:
+                    <span>{{ selectedCustomer?.name || "" }}</span>
+                  </p>
+                  <p class="fs-6 mx-0 my-1">
+                    Email:
+                    <span>{{ selectedCustomer?.email || "" }}</span>
+                  </p>
+                  <p class="fs-6 mx-0 my-1">
+                    User ID:
+                    <span>{{ selectedCustomer?.id || "" }}</span>
+                  </p>
+                </div>
+                <div class="col-4">
+                  <p class="fs-6 h6 mx-0 my-1 text-dark">Invoice</p>
+                  <p class="fs-6 mx-0 my-1">
+                    Date:
+                    {{ new Date().toISOString().slice(0, 10) }}
+                  </p>
+                </div>
+              </div>
+              <hr class="mx-0 my-2 p-0 bg-secondary" />
+              <div class="row">
+                <div class="col-12">
+                  <table class="table w-100">
+                    <thead>
+                      <tr class="text-xs">
+                        <th>Name</th>
+                        <th>Qty</th>
+                        <th>Total</th>
+                        <th>Remove</th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      <tr
+                        v-if="selectedProduct.length > 0"
+                        v-for="(product, index) in selectedProduct"
+                        :key="index"
+                        class="text-center"
+                      >
+                        <td>{{ product["name"] }}</td>
+                        <td>{{ product["unit"] }}</td>
+                        <td>{{ product["price"] }}</td>
+                        <td>
+                          <div
+                            class="btn-group mb-1"
+                            role="group"
+                            aria-label="Basic mixed styles example"
+                          >
+                            <button
+                              @click="removeQty(product.id)"
+                              class="btn btn-warning btn-sm"
+                            >
+                              -
+                            </button>
+                            <button
+                              @click="addQty(product.id)"
+                              class="btn btn-success btn-sm"
+                            >
+                              +
+                            </button>
+                          </div>
+                          <button
+                            @click="removeProductFromSale(index)"
+                            class="btn btn-danger btn-sm"
+                          >
+                            Remove
+                          </button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <hr class="mx-0 my-2 p-0 bg-secondary" />
+              <div class="row">
+                <div class="col-12">
+                  <p class="text-bold text-xs my-1 text-dark">
+                    Total:
+                    <i class="bi bi-currency-dollar"></i>
+                    {{ calculateTotal() }}
+                  </p>
+                  <p class="text-bold text-xs my-1 text-dark">
+                    VAT ({{ vatRate }}%):
+                    <i class="bi bi-currency-dollar">{{ vatAmount }}</i>
+                  </p>
+                  <p>
+                    <button
+                      class="btn btn-info btn-sm my-1 bg-gradient-primary w-40"
+                      @click="applyVat"
+                    >
+                      Apply VAT
+                    </button>
+                  </p>
+                  <p>
+                    <button
+                      class="btn btn-secondary btn-sm my-1 bg-gradient-primary w-40"
+                      @click="removeVat"
+                    >
+                      Remove VAT
+                    </button>
+                  </p>
+                  <p>
+                    <span class="text-xxs">Discount Mode:</span>
+                  </p>
+                  <select v-model="usePercentageDiscount">
+                    <option :value="false">Flat Discount</option>
+                    <option :value="true">Percentage Discount</option>
+                  </select>
+                  <p class="text-bold text-xs my-1 text-dark">
+                    Discount:
+                    <i class="bi bi-currency-dollar"></i>
+                  </p>
+                  <div v-if="!usePercentageDiscount">
+                    <span class="text-xxs">Flat Discount:</span>
+                    <input
+                      type="number"
+                      v-model="flatDiscount"
+                      class="form-control w-40"
+                      min="0"
+                    />
+                    <p>
+                      <button
+                        class="btn btn-warning btn-sm my-1 bg-gradient-primary w-40"
+                        @click="applyDiscount">
+                        Apply Flat Discount
+                      </button>
+                    </p>
+                  </div>
+                  <div v-else>
+                    <span class="text-xxs">Discount (%):<i class="bi bi-currency-dollar"></i> {{ discountAmount }}</span>
+                    <input
+                      type="number"
+                      class="form-control w-40"
+                      min="0"
+                      max="100"
+                      step="0.25"
+                      v-model="discountPercent"
+                    />
+                    <p>
+                      <button
+                        class="btn btn-warning btn-sm my-1 bg-gradient-primary w-40" @click="applyDiscount">
+                        Apply Percentage Discount
+                      </button>
+                    </p>
+                  </div>
+                  <p>
+                    <button
+                      class="btn btn-secondary btn-sm my-1 bg-gradient-primary w-40"
+                      @click="removeDiscount"
+                    >
+                      Remove Discount
+                    </button>
+                  </p>
+                  <hr class="mx-0 my-2 p-0 bg-secondary" />
+                  <p class="text-bold text-xs my-1 text-dark">
+                    Payable:
+                    <i class="bi bi-currency-dollar"></i>
+                  </p>
+                  <p>
+                    <button class="btn btn-success btn-sm my-3 bg-gradient-primary w-40">
+                      Confirm
+                    </button>
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Product Selection -->
+      <div class="col-md-4 col-lg-4 p-2">
+        <div class="card">
+          <div class="card-body shadow-sm">
+            <h4>Select Product</h4>
+            <input
+              type="text"
+              v-model="searchProduct"
+              placeholder="Search"
+              class="form-control"
+            />
+
+            <EasyDataTable
+              buttons-pagination
+              alternating
+              :headers="ProductHeader"
+              :items="ProductItem"
+              :rows-per-page="5"
+              :search-value="searchProduct"
+              v-model="itemSeletected"
+            >
+              <template #item-image_url="{ image_url }">
+                <img
+                  :src="`${image_url}`"
+                  alt="Product Image"
+                  class="img-thumbnail"
+                  style="width: 50px; height: 50px"
+                />
+              </template>
+              <template #item-action="{ id, image, name, price, unit }">
+                <button
+                  :class="['btn btn-sm', unit > 0 ? 'btn-success' : 'btn-warning']"
+                  :disabled="unit <= 0"
+                  @click="addProductToSale(id, image, name, price, unit)"
+                >
+                  {{ unit > 0 ? "Add" : "S.Out" }}
+                </button>
+              </template>
+            </EasyDataTable>
+          </div>
+        </div>
+      </div>
+
+      <!-- Customer Selection -->
+      <div class="col-md-4 col-lg-4 p-2">
+        <div class="card">
+          <div class="card-body shadow-sm">
+            <h4>Select Customer</h4>
+            <input
+              type="text"
+              v-model="searchCustomer"
+              placeholder="Search"
+              class="form-control"
+            />
+
+            <EasyDataTable
+              buttons-pagination
+              alternating
+              :headers="CustomerHeader"
+              :items="CustomerItem"
+              :rows-per-page="5"
+              :search-value="searchCustomer"
+            >
+              <template #item-action="{ id, name, email }">
+                <button
+                  class="btn btn-success mx-3 btn-sm"
+                  @click="addCustomerToSale({ id, name, email })"
+                >
+                  Add
+                </button>
+              </template>
+            </EasyDataTable>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
